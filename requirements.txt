@@ -1,0 +1,22 @@
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+GPUtil
+aiohttp
+aiofiles
+natsort
+opencv-python
+Pillow
+psutil
+pytz
+dzgram
+warpcrypto>=2.0.5; sys_platform != 'win32'
+pyrofork>=2.3.69; sys_platform == 'win32'
+requests
+tgcrypto; sys_platform == 'win32'
+uvloop; sys_platform != 'win32'
+yt_dlp
+yt-dlp-ejs
+pymegatools
+speedtest-cli
+
