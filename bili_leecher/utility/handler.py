@@ -198,7 +198,23 @@ async def Zip_Handler(down_path: str, is_split: bool, remove: bool, task_ctx=Non
 
     logging.info("Now ZIPPING the folder...")
     makedirs(temp_zpath, exist_ok=True)
-    await archive(down_path, is_split, remove, target_dir=temp_zpath, task_ctx=task_ctx)
+
+    # Resolve split_size_mb for Zip_Handler
+    user_id = getattr(task_ctx, "user_id", None) or (task_ctx.chat_id if task_ctx else 0)
+    u_conf = SettingsManager.get_user_settings(user_id) if user_id else {}
+    from bili_leecher import colab_bot
+    bot_has_prem = hasattr(colab_bot, "me") and getattr(colab_bot.me, "is_premium", False)
+    task_prem_opt = task_ctx.options.get("is_prem") if task_ctx else None
+    if task_prem_opt is not None:
+        is_prem = bool(task_prem_opt)
+    else:
+        is_prem = bot_has_prem
+
+    max_allowed_mb = 3950 if is_prem else 1950
+    task_split_mb = task_ctx.options.get("split_size_mb") if task_ctx else 0
+    split_sz_mb = min(int(task_split_mb), max_allowed_mb) if task_split_mb else min(int(u_conf.get("split_size_mb", 1950)), max_allowed_mb)
+
+    await archive(down_path, is_split, remove, split_size_mb=split_sz_mb, target_dir=temp_zpath, task_ctx=task_ctx)
     await sleep(2)
 
     total_zsize = getSize(temp_zpath)

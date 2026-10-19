@@ -37,6 +37,7 @@ from bili_leecher.utility.settings_manager import (
     get_cookie_menu_markup,
     get_thumb_menu_markup,
     get_split_menu_markup,
+    get_archive_menu_markup,
     get_dump_menu_markup,
     get_captions_menu_markup,
     get_concurrency_markup,
@@ -115,6 +116,9 @@ def parse_bili_flags_and_links(input_text: str, reply_message=None):
     is_gf = False
     is_pd = False
     rc_target = ""
+    archive_format = None
+    split_size_mb = 0
+    is_prem = None
 
     i = 0
     while i < len(tokens):
@@ -158,8 +162,45 @@ def parse_bili_flags_and_links(input_text: str, reply_message=None):
         elif tok == "-med":
             stream_upload = True
             i += 1
-        elif tok == "-z":
+        elif tok in ["-z", "-zip"]:
             mode_type = "zip"
+            archive_format = "zip"
+            i += 1
+        elif tok in ["-7z", "-7zip"]:
+            mode_type = "zip"
+            archive_format = "7z"
+            i += 1
+        elif tok in ["-rar"]:
+            mode_type = "zip"
+            archive_format = "rar"
+            i += 1
+        elif tok in ["-tar"]:
+            mode_type = "zip"
+            archive_format = "tar"
+            i += 1
+        elif tok in ["-tgz", "-targz", "-tar.gz"]:
+            mode_type = "zip"
+            archive_format = "tar.gz"
+            i += 1
+        elif tok in ["-arc", "-archive", "-fmt"] and i + 1 < len(tokens):
+            mode_type = "zip"
+            archive_format = tokens[i + 1].lower().strip().lstrip(".")
+            i += 2
+        elif tok in ["-split", "-sp"] and i + 1 < len(tokens):
+            val = tokens[i + 1].lower().strip()
+            if "gb" in val or "g" in val:
+                num = float(re.sub(r"[^\d.]", "", val) or 2)
+                split_size_mb = 3950 if num >= 3.5 else int(num * 1024)
+            elif "mb" in val or "m" in val:
+                split_size_mb = int(re.sub(r"[^\d]", "", val) or 1950)
+            elif val.isdigit():
+                split_size_mb = int(val)
+            i += 2
+        elif tok in ["-prem", "-premium"]:
+            is_prem = True
+            i += 1
+        elif tok in ["-free"]:
+            is_prem = False
             i += 1
         elif tok == "-e":
             mode_type = "unzip"
@@ -297,6 +338,9 @@ def parse_bili_flags_and_links(input_text: str, reply_message=None):
         "is_gf": is_gf,
         "is_pd": is_pd,
         "rc_target": rc_target,
+        "archive_format": archive_format,
+        "split_size_mb": split_size_mb,
+        "is_prem": is_prem,
     }
 
     return clean_links, options
@@ -394,7 +438,10 @@ def get_help_text() -> str:
         "• <b>Quality:</b> <code>-q 8k|4k|1080p+|1080p|720p|480p</code> or shortcut <code>-4k</code>\n"
         "• <b>Lossless Audio:</b> <code>-audio</code> or <code>-mp3</code> (FLAC / 320k)\n"
         "• <b>Danmaku & Subs:</b> <code>-dd</code> (bullet comments .ass), <code>-sub</code> (subtitles)\n"
-        "• <b>Archive & Merge:</b> <code>-z</code> (zip files), <code>-m</code> (merge parts into 1 video)\n"
+        "• <b>Archive Formats:</b> <code>-zip</code>, <code>-7z</code>, <code>-rar</code>, <code>-tar</code>, <code>-tgz</code> (or <code>-arc &lt;fmt&gt;</code>)\n"
+        "• <b>Multi-Volume Split:</b> <code>-split 500m|1g|1950m|3950m</code> (or <code>-sp &lt;size&gt;</code>)\n"
+        "• <b>Telegram Tier:</b> <code>-prem</code> (4GB limit) / <code>-free</code> (2GB limit)\n"
+        "• <b>Merge Videos:</b> <code>-m</code> (merge multi-part video into 1 file)\n"
         "• <b>Concurrency:</b> <code>-conc &lt;1-8&gt;</code> (parallel download streams)\n"
         "• <b>Engines:</b> <code>-web</code> (BBDown Web), <code>-tv</code> (BBDown TV), <code>-app</code> (APP), <code>-ytdl</code> (yt-dlp)\n\n"
         "<b>⚙️ 4. Quick Utilities:</b>\n"
@@ -1446,6 +1493,20 @@ async def callback_router(client, query: CallbackQuery):
     elif data.startswith("uset_split_"):
         target_uid = int(data.split("_")[2])
         await query.message.edit_text("✂️ <b>Select Video Split Size Limit:</b>", reply_markup=get_split_menu_markup(target_uid))
+        return
+
+    elif data.startswith("uset_arcfmt_"):
+        target_uid = int(data.split("_")[2])
+        await query.message.edit_text("📦 <b>Select Default Archive Compression Format:</b>", reply_markup=get_archive_menu_markup(target_uid))
+        return
+
+    elif data.startswith("set_arcfmt_"):
+        parts = data.split("_")
+        target_uid = int(parts[2])
+        fmt = parts[3]
+        SettingsManager.set_user_setting(target_uid, "archive_format", fmt)
+        await query.answer(f"Archive format set to .{fmt} 📦")
+        await query.message.edit_text(get_user_settings_text(target_uid), reply_markup=get_user_settings_markup(target_uid))
         return
 
     elif data.startswith("set_split_"):

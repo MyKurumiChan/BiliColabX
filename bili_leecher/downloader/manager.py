@@ -40,6 +40,9 @@ async def downloadManager(source, is_ytdl: bool, task_ctx=None):
 
         BOT.CurrentTaskIndex = i + 1
         BOT.ActiveTasks = source[i:]
+        if task_ctx:
+            task_ctx.batch_index = i + 1
+            task_ctx.batch_total = len(source)
         logging.info(f"[Download {i+1}/{len(source)}] Starting Bilibili download: {link}")
 
         try:

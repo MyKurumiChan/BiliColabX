@@ -261,14 +261,53 @@ def render_multi_status(active_tasks: dict, chat_id: int = None) -> str:
         engine = ctx.engine or "BBDown 📺"
         state = ctx.status_state or "Downloading"
 
-        task_block = (
-            f"╭⌬ <b>[{state}]</b> <code>{title}</code>\n"
-            f"├⌬ <code>[{prog_bar}]</code> <b>{pct:.1f}%</b>\n"
-            f"├⌬ <b>Speed :</b> <code>{speed}</code> | <b>ETA :</b> <code>{eta}</code>\n"
-            f"├⌬ <b>Done  :</b> <code>{done}</code> / <code>{left}</code>\n"
-            f"├⌬ <b>User  :</b> <b>{ctx.user_name}</b> | <b>Engine:</b> <i>{engine}</i>\n"
-            f"╰⌬ <b>Stop  :</b> /cancel_{t_id}\n"
-        )
+        active_parts_dict = getattr(ctx, "active_parts", {})
+        total_p = getattr(ctx, "total_parts_count", 1)
+        comp_p = getattr(ctx, "completed_parts_count", 0)
+        batch_idx = getattr(ctx, "batch_index", 1)
+        batch_tot = getattr(ctx, "batch_total", 1)
+        batch_str = f" [Item {batch_idx}/{batch_tot}]" if batch_tot > 1 else ""
+
+        if active_parts_dict or total_p > 1:
+            task_block = (
+                f"╭⌬ <b>[{state}]</b> <code>{title}</code>{batch_str}\n"
+                f"├⌬ <b>Progress:</b> <code>[{prog_bar}]</code> <b>{pct:.1f}%</b> ({comp_p}/{total_p} parts)\n"
+                f"├⌬ <b>Combined Speed:</b> <code>{speed}</code> | <b>ETA:</b> <code>{eta}</code>\n"
+            )
+            if active_parts_dict:
+                task_block += f"├─ <b>📂 Active Downloading Parts ({len(active_parts_dict)}):</b>\n"
+                sorted_parts = sorted(active_parts_dict.items(), key=lambda x: int(x[0]))
+                for p_num, p_info in sorted_parts[:6]:
+                    p_pct = float(p_info.get("pct", 0.0))
+                    p_bar = circular_progress(p_pct)
+                    p_spd = p_info.get("speed", "0 B/s")
+                    p_done = p_info.get("done", "")
+                    p_left = p_info.get("left", "")
+                    p_st = p_info.get("state", "DL")
+                    p_eta = p_info.get("eta", "")
+
+                    if "merging" in p_st.lower():
+                        task_block += f"│  • <b>P{p_num}:</b> <code>[{p_bar}]</code> <b>{p_pct:.1f}%</b> 🎬 Merging\n"
+                    elif "cleaning" in p_st.lower():
+                        task_block += f"│  • <b>P{p_num}:</b> <code>[{p_bar}]</code> <b>{p_pct:.1f}%</b> 🧹 Cleaning\n"
+                    else:
+                        size_str = f"{p_done} / {p_left}" if p_left and p_left != "N/A" else p_done
+                        eta_str = f" (ETA: {p_eta})" if p_eta and p_eta != "N/A" else ""
+                        task_block += f"│  • <b>P{p_num}:</b> <code>[{p_bar}]</code> <b>{p_pct:.1f}%</b> | <code>{p_spd}</code> | <code>{size_str}</code>{eta_str}\n"
+
+            task_block += (
+                f"├⌬ <b>User  :</b> <b>{ctx.user_name}</b> | <b>Engine:</b> <i>{engine}</i>\n"
+                f"╰⌬ <b>Stop  :</b> /cancel_{t_id}\n"
+            )
+        else:
+            task_block = (
+                f"╭⌬ <b>[{state}]</b> <code>{title}</code>{batch_str}\n"
+                f"├⌬ <code>[{prog_bar}]</code> <b>{pct:.1f}%</b>\n"
+                f"├⌬ <b>Speed :</b> <code>{speed}</code> | <b>ETA :</b> <code>{eta}</code>\n"
+                f"├⌬ <b>Done  :</b> <code>{done}</code> / <code>{left}</code>\n"
+                f"├⌬ <b>User  :</b> <b>{ctx.user_name}</b> | <b>Engine:</b> <i>{engine}</i>\n"
+                f"╰⌬ <b>Stop  :</b> /cancel_{t_id}\n"
+            )
         lines.append(task_block)
 
     lines.append(sysINFO())

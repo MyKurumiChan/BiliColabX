@@ -307,6 +307,14 @@ def parse_size_to_bytes(size_str: str) -> int:
     return int(val * multipliers.get(unit, 1))
 
 
+def parse_speed_to_bytes(spd_str: str) -> int:
+    """Parses speed strings like '14.5 MiB/s' into bytes per second."""
+    if not spd_str:
+        return 0
+    clean = spd_str.replace("/s", "").replace("/S", "").strip()
+    return parse_size_to_bytes(clean)
+
+
 async def monitor_download_progress(down_dir: str, task_ctx, stop_event: asyncio.Event):
     """
     Background progress monitor that computes real-time download speed
@@ -603,6 +611,9 @@ async def run_bbdown_multipart(
 
     if task_ctx:
         task_ctx.is_multipart_custom_pct = True
+        task_ctx.total_parts_count = total_to_download
+        task_ctx.completed_parts_count = 0
+        task_ctx.active_parts = {}
 
     sem = asyncio.Semaphore(max(1, concurrency_limit))
 
@@ -619,6 +630,18 @@ async def run_bbdown_multipart(
             delay = (part_num - start_part) * 2
             if 0 < delay < 20:
                 await sleep(delay)
+
+            if task_ctx:
+                task_ctx.active_parts[part_num] = {
+                    "part_num": part_num,
+                    "name": f"P{part_num}",
+                    "pct": 0.0,
+                    "speed": "Starting...",
+                    "done": "0 B",
+                    "left": "N/A",
+                    "eta": "N/A",
+                    "state": "Starting ⬇️",
+                }
 
             cmd = [
                 bbdown_bin,
@@ -666,56 +689,79 @@ async def run_bbdown_multipart(
 
             async for l_str in read_stream_lines(proc.stdout):
                 if task_ctx:
-                    part_pct = part_progress.get(part_num, 0.0)
+                    p_info = task_ctx.active_parts.get(part_num, {
+                        "part_num": part_num,
+                        "name": f"P{part_num}",
+                        "pct": 0.0,
+                        "speed": "0 B/s",
+                        "done": "0 B",
+                        "left": "N/A",
+                        "eta": "N/A",
+                        "state": "Downloading",
+                    })
+
                     m_a2 = pattern_aria2.search(l_str)
                     if m_a2:
                         p_done, p_tot, p_pct, p_spd, p_eta = m_a2.groups()
-                        part_pct = float(p_pct)
-                        task_ctx.speed = f"{p_spd.strip()}/s"
-                        task_ctx.done = f"{p_done.strip()} (P{part_num})"
-                        task_ctx.left = p_tot.strip()
+                        p_info["pct"] = float(p_pct)
+                        p_info["speed"] = f"{p_spd.strip()}/s"
+                        p_info["done"] = p_done.strip()
+                        p_info["left"] = p_tot.strip()
                         if p_eta:
-                            task_ctx.eta = p_eta.strip()
+                            p_info["eta"] = p_eta.strip()
+                        p_info["state"] = "Downloading"
                     else:
                         m_spd = pattern_spd.search(l_str)
                         if m_spd:
-                            task_ctx.speed = m_spd.group(1).strip()
+                            p_info["speed"] = m_spd.group(1).strip()
                         else:
                             m_adl = pattern_aria_dl.search(l_str)
                             if m_adl:
-                                task_ctx.speed = f"{m_adl.group(1).strip()}/s"
+                                p_info["speed"] = f"{m_adl.group(1).strip()}/s"
 
                         m_pr = pattern_prog.search(l_str)
                         if m_pr:
                             try:
-                                part_pct = float(m_pr.group(1))
+                                p_info["pct"] = float(m_pr.group(1))
                             except Exception:
                                 pass
 
                     l_low = l_str.lower()
                     if any(k in l_low for k in ["混流", "合并", "mux", "merge", "封装", "ffmpeg"]):
-                        task_ctx.status_state = f"Merging P{part_num} 🎬"
-                        task_ctx.speed = "FFmpeg Mux ⚡"
-                        task_ctx.eta = "Processing..."
-                        part_pct = 99.5
-                    elif any(k in l_low for k in ["下载音频", "audio"]) and "merging" not in getattr(task_ctx, "status_state", "").lower():
-                        task_ctx.status_state = f"Downloading Audio P{part_num} 🎵"
-                    elif any(k in l_low for k in ["下载视频", "video"]) and "merging" not in getattr(task_ctx, "status_state", "").lower():
-                        task_ctx.status_state = f"Downloading Video P{part_num} 🎬"
+                        p_info["state"] = "Merging 🎬"
+                        p_info["speed"] = "FFmpeg"
+                        p_info["eta"] = "Processing..."
+                        p_info["pct"] = 99.5
+                    elif any(k in l_low for k in ["下载音频", "audio"]) and "merging" not in p_info["state"].lower():
+                        p_info["state"] = "Audio 🎵"
+                    elif any(k in l_low for k in ["下载视频", "video"]) and "merging" not in p_info["state"].lower():
+                        p_info["state"] = "Video 🎬"
                     elif any(k in l_low for k in ["清理", "clean"]):
-                        task_ctx.status_state = f"Cleaning P{part_num} 🧹"
-                        task_ctx.speed = "Cleaning 🧹"
-                        task_ctx.eta = "Almost done"
-                        part_pct = 99.9
+                        p_info["state"] = "Cleaning 🧹"
+                        p_info["speed"] = "Cleaning 🧹"
+                        p_info["pct"] = 99.9
                     elif any(k in l_low for k in ["下载完成", "任务完成", "succeed"]):
-                        part_pct = 100.0
+                        p_info["pct"] = 100.0
 
-                    part_progress[part_num] = part_pct
+                    task_ctx.active_parts[part_num] = p_info
+                    part_progress[part_num] = p_info["pct"]
+
                     in_progress_sum = sum(p for p in part_progress.values())
                     overall_pct = ((completed_parts * 100.0 + in_progress_sum) / (total_to_download * 100.0)) * 100.0
                     task_ctx.percentage = round(min(99.5, max(0.5, overall_pct)), 1)
-                    if "merging" not in getattr(task_ctx, "status_state", "").lower() and "cleaning" not in getattr(task_ctx, "status_state", "").lower():
-                        task_ctx.status_state = f"Downloading P{part_num} ({part_pct:.0f}%)"
+                    task_ctx.done = f"{completed_parts}/{total_to_download} parts"
+
+                    # Calculate aggregate speed across active parts
+                    tot_spd_bytes = sum(parse_speed_to_bytes(pi.get("speed", "")) for pi in task_ctx.active_parts.values())
+                    if tot_spd_bytes > 0:
+                        task_ctx.speed = f"{sizeUnit(tot_spd_bytes)}/s"
+                    elif p_info.get("speed") and p_info["speed"] != "0 B/s":
+                        task_ctx.speed = p_info["speed"]
+
+                    if p_info.get("eta") and p_info["eta"] != "N/A":
+                        task_ctx.eta = p_info["eta"]
+
+                    task_ctx.status_state = f"Downloading ({len(task_ctx.active_parts)} active)"
 
                     await status_bar(
                         down_msg=f"<b>📥 DOWNLOADING » </b><code>{task_ctx.task_title}</code>\n",
@@ -735,9 +781,12 @@ async def run_bbdown_multipart(
                 del part_progress[part_num]
 
             if task_ctx:
+                task_ctx.completed_parts_count = completed_parts
+                if part_num in task_ctx.active_parts:
+                    del task_ctx.active_parts[part_num]
                 task_ctx.percentage = round((completed_parts / total_to_download) * 100, 1)
                 task_ctx.done = f"{completed_parts}/{total_to_download} parts"
-                task_ctx.status_state = f"Completed P{part_num}"
+                task_ctx.status_state = f"Completed P{part_num} ✅"
                 await status_bar(
                     down_msg=f"<b>📥 DOWNLOADING » </b><code>{task_ctx.task_title}</code>\n",
                     speed=task_ctx.speed,

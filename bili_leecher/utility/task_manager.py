@@ -93,6 +93,13 @@ class TaskContext:
         self.sent_msg = None
         self.asyncio_task = None
 
+        # Multi-part & batch live tracking
+        self.active_parts = {}         # {part_num: {"name": str, "pct": float, "speed": str, "done": str, "left": str, "eta": str, "state": str}}
+        self.completed_parts_count = 0
+        self.total_parts_count = 1
+        self.batch_index = 1
+        self.batch_total = len(self.links) if self.links else 1
+
 
 async def task_starter(message, text):
     try:

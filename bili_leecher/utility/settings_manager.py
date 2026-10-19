@@ -39,6 +39,7 @@ DEFAULT_USER_SETTINGS = {
     "dump_channel": "",
     "send_to_dm": True,
     "auto_delete_status": False,       # Disappear completed / status messages
+    "archive_format": "zip",           # "zip", "7z", "rar", "tar", "tar.gz"
 }
 
 DEFAULT_BOT_SETTINGS = {
@@ -343,10 +344,17 @@ def get_user_settings_text(user_id: int) -> str:
     u_autodel = u.get("auto_delete_status", False)
     autodel_disp = "✅ ON (Disappear after 30s)" if u_autodel else "❌ OFF (Permanent)"
 
+    from bili_leecher import colab_bot
+    bot_has_prem = hasattr(colab_bot, "me") and getattr(colab_bot.me, "is_premium", False)
+    tg_tier_disp = "⭐️ Premium (4GB Limit - Auto)" if bot_has_prem else "👤 Free Account (2GB Limit - Auto)"
+    arc_fmt = u.get("archive_format", "zip").upper()
+
     return (
         f"<b>⚙️ User Settings (BiliColabX)</b>\n"
         f"<i>Personal preferences for Bilibili leeching & Google Drive mirroring:</i>\n\n"
         f"╭⌬ <b>Bilibili SESSDATA:</b> {sess_disp}\n"
+        f"├⌬ <b>Telegram Tier    :</b> <code>{tg_tier_disp}</code>\n"
+        f"├⌬ <b>Archive Format   :</b> <code>.{arc_fmt.lower()}</code>\n"
         f"├⌬ <b>Default Quality  :</b> <code>{bili_q}</code> ({audio})\n"
         f"├⌬ <b>Concurrency      :</b> <code>{conc} Parallel Downloads</code> (Default)\n"
         f"├⌬ <b>Download Engine  :</b> <code>{engine}</code>\n"
@@ -373,6 +381,9 @@ def get_user_settings_markup(user_id: int) -> InlineKeyboardMarkup:
     eng_short = u.get("engine", "BBDown - WEB").replace("BBDown - ", "").split()[0]
     eng_lbl = f"⚙️ Engine: {eng_short}"
 
+    arc_fmt = u.get("archive_format", "zip").upper()
+    arc_btn_lbl = f"📦 Format: {arc_fmt}"
+
     sess = SettingsManager.get_sessdata(user_id)
     cookie_lbl = "🍪 SESSDATA: ✅" if sess else "🍪 SESSDATA: ❌"
 
@@ -390,23 +401,26 @@ def get_user_settings_markup(user_id: int) -> InlineKeyboardMarkup:
             InlineKeyboardButton(split_sz, callback_data=f"uset_split_{user_id}"),
         ],
         [
+            InlineKeyboardButton(arc_btn_lbl, callback_data=f"uset_arcfmt_{user_id}"),
             InlineKeyboardButton(danmaku_lbl, callback_data=f"uset_toggle_danmaku_{user_id}"),
+        ],
+        [
             InlineKeyboardButton(autodel_lbl, callback_data=f"uset_toggle_autodel_{user_id}"),
-        ],
-        [
             InlineKeyboardButton(dm_lbl, callback_data=f"uset_toggle_dm_{user_id}"),
+        ],
+        [
             InlineKeyboardButton("📁 Drive Settings", callback_data=f"uset_drive_{user_id}"),
-        ],
-        [
             InlineKeyboardButton("☁️ Cloud (Gofile/PD/RC)", callback_data=f"uset_cloud_{user_id}"),
+        ],
+        [
             InlineKeyboardButton("🖼 Thumbnail", callback_data=f"uset_thumb_{user_id}"),
-        ],
-        [
             InlineKeyboardButton("✏️ Captions", callback_data=f"uset_captions_{user_id}"),
-            InlineKeyboardButton("🗂 Dump Channel", callback_data=f"uset_dump_{user_id}"),
         ],
         [
+            InlineKeyboardButton("🗂 Dump Channel", callback_data=f"uset_dump_{user_id}"),
             InlineKeyboardButton("🔄 Reset All", callback_data=f"uset_reset_{user_id}"),
+        ],
+        [
             InlineKeyboardButton("❌ Close Menu", callback_data="uset_close"),
         ],
     ])
@@ -467,6 +481,26 @@ def get_split_menu_markup(user_id: int) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton("3.90 GB (TG Premium Limit)", callback_data=f"set_split_{user_id}_3900"),
+        ],
+        [
+            InlineKeyboardButton("🔙 Back to Settings", callback_data=f"open_uset_{user_id}"),
+            InlineKeyboardButton("❌ Close", callback_data="uset_close"),
+        ],
+    ])
+
+
+def get_archive_menu_markup(user_id: int) -> InlineKeyboardMarkup:
+    u = SettingsManager.get_user_settings(user_id)
+    cur = u.get("archive_format", "zip").lower()
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(f"{'✅ ' if cur == 'zip' else ''}.ZIP", callback_data=f"set_arcfmt_{user_id}_zip"),
+            InlineKeyboardButton(f"{'✅ ' if cur == '7z' else ''}.7Z", callback_data=f"set_arcfmt_{user_id}_7z"),
+        ],
+        [
+            InlineKeyboardButton(f"{'✅ ' if cur == 'rar' else ''}.RAR", callback_data=f"set_arcfmt_{user_id}_rar"),
+            InlineKeyboardButton(f"{'✅ ' if cur == 'tar' else ''}.TAR", callback_data=f"set_arcfmt_{user_id}_tar"),
+            InlineKeyboardButton(f"{'✅ ' if cur in ['tar.gz', 'tgz'] else ''}.TAR.GZ", callback_data=f"set_arcfmt_{user_id}_tar.gz"),
         ],
         [
             InlineKeyboardButton("🔙 Back to Settings", callback_data=f"open_uset_{user_id}"),

@@ -21,6 +21,7 @@
 * 🌐 **Multi-Engine Routing**: Choose between **BBDown WEB** (highest compatibility, VIP 8K/4K/1080P+), **BBDown TV** (fastest streaming), **BBDown APP**, or **yt-dlp** via simple flags (`-web`, `-tv`, `-app`, `-ytdl`).
 * 🚀 **UPOS CDN Acceleration**: Uses high-speed mirror hosts (`upos-sz-mirrorhw.bilivideo.com`) for blazing fast Bilibili downloads on overseas Colab servers.
 * 📑 **Multi-Link & Multi-Part (分P) Batch Support**: Paste a single link, an episode range (e.g. `1-20`), or a list of multiple URLs separated by newlines — the bot handles everything automatically.
+* 📊 **Per-Part Live Download Status**: Multi-part and batch downloads display individual progress for each concurrent part in real time (e.g. `P1`, `P2`, `P3`), showing each part's separate progress bar, speed, downloaded/total size, ETA, and muxing/merging state!
 * 🛡️ **Anti-Ban Delay Staggering**: Automatically staggers parallel video parts to protect your IP from Bilibili HTTP 412/429 anti-bot rate limits.
 * 🍪 **VIP Authentication (SESSDATA & cookies.txt)**: Direct support for Bilibili VIP tokens to unlock **8K Ultra HD**, **4K Dolby Vision/HDR**, **1080P 60FPS**, and member-exclusive anime. Configurable per-user (`/usetting`) or globally (`/bsetting`).
 * 💬 **Bullet Danmaku & Subtitles**: Download live bullet comments as `.ass` subtitle files (`-dd`) and subtitles (`-sub`).
@@ -118,15 +119,22 @@ Everything you need to customize is controllable through flags directly in your 
 | `1-20` | `-p 1-20`, `-range 1-20` | Download specific episode range of a series or playlist |
 | `-conc <1-8>` | `-parallel` | Set parallel download concurrency for this task (e.g. `-conc 6`) |
 
-### 🔹 Danmaku, Subtitles & Archives
+### 🔹 Danmaku, Subtitles & Multi-Format Archives
 | Flag | Shortcut | Description |
 | :--- | :--- | :--- |
 | `-dd` | `-danmaku` | Download bullet comments as `.ass` subtitle |
 | `-sub` / `-nosub` | — | Download or skip subtitles |
 | `-doc` / `-med` | — | Upload as Document file or Streamable Media |
 | `-m` | `-merge` | Merge multi-part video into one file |
-| `-z` / `-e` | — | Compress to Zip / Extract from Archive before uploading |
-| `-p <pswd>` | — | Archive password (when `-z` or `-e` is used) |
+| `-z`, `-zip` | — | Compress to `.zip` archive before uploading |
+| `-7z` | `-7zip` | Compress to `.7z` archive (encrypted headers support) |
+| `-rar` | — | Compress to `.rar` multi-volume archive |
+| `-tar` / `-tgz` | `-targz` | Archive as `.tar` or compressed `.tar.gz` |
+| `-arc <fmt>` | `-archive`, `-fmt` | Custom archive format: `zip`, `7z`, `rar`, `tar`, `tar.gz` |
+| `-split <size>` | `-sp` | Custom multi-volume split size (e.g. `-split 500m`, `-split 1g`, `-split 1950m`, `-split 3950m`) |
+| `-prem` / `-free` | `-premium` | Override auto-detected Telegram limit (Premium 4GB vs Free 2GB) |
+| `-p <pswd>` | — | Archive password (when archive flags or `-e` are used) |
+| `-e` | — | Extract from archive before uploading |
 | `-n <name>` | — | Set custom output filename |
 | `-ss <sec>` | — | Generate sample preview clip (e.g. `-ss 30`) |
 | `-shots <num>` | — | Generate screenshot album (e.g. `-shots 5`) |
@@ -142,19 +150,25 @@ Everything you need to customize is controllable through flags directly in your 
 # 2. Mirror a multi-part tutorial directly into a custom Google Drive subfolder:
 /mirror https://www.bilibili.com/video/BV1xx411c7mD -df Courses/Python
 
-# 3. Zip an entire series and upload directly to Gofile:
-/mirror https://b23.tv/xxxx -gofile -z
+# 3. Create a 7z multi-volume archive split at 1GB parts with password:
+/mirror https://b23.tv/xxxx -7z -split 1g -p mySecretPassword
 
-# 4. Mirror directly to PixelDrain:
+# 4. Rar archive uploaded directly to Gofile:
+/mirror https://b23.tv/xxxx -rar -gofile
+
+# 5. Download 4K series with Telegram Premium 4GB volume limits:
+/bili https://b23.tv/xxxx 1-20 -4k -prem
+
+# 6. Mirror directly to PixelDrain:
 /mirror https://b23.tv/xxxx -pixeldrain
 
-# 5. Mirror to an Rclone remote (OneDrive, Mega, S3):
+# 7. Mirror to an Rclone remote (OneDrive, Mega, S3):
 /mirror https://b23.tv/xxxx -rc onedrive:Bilibili_Archive
 
-# 6. Extract lossless audio (FLAC / 320k) from a music video:
+# 8. Extract lossless audio (FLAC / 320k) from a music video:
 /bili https://b23.tv/xxxx -audio
 
-# 7. High-concurrency download (6 parallel streams):
+# 9. High-concurrency download (6 parallel streams):
 /bili https://b23.tv/xxxx 1-30 -conc 6
 ```
 
